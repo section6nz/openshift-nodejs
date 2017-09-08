@@ -1,0 +1,16 @@
+#!/bin/bash -e
+#
+# S2I save-artifacts script for the node builder image.
+# The save-artifacts script is responsible for gathering all the dependencies
+# into a tar file and streaming it to the standard output
+#
+# For more information refer to the documentation:
+# https://github.com/openshift/source-to-image/blob/master/docs/builder_image.md
+#
+
+pushd ${OPENSHIFT_DEPLOYMENTS_DIR} >/dev/null
+if [ -d node_modules ]; then
+    # all node_modules contents to tar stream
+    tar cf - node_modules
+fi
+popd >/dev/null

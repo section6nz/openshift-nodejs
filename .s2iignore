@@ -1,0 +1,6 @@
+.git/**
+.openshift/**
+.dockerignore
+Dockerfile*
+Makefile
+README.md

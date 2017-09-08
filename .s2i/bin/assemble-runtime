@@ -1,0 +1,8 @@
+#!/bin/bash -e
+#
+# S2I assemble script for the node builder image.
+# The assemble script builds your application source ready to run.
+#
+# For more information refer to the documentation:
+# https://github.com/openshift/source-to-image/blob/master/docs/runtime_image.md
+#

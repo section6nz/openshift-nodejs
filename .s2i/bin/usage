@@ -1,0 +1,11 @@
+#!/bin/bash -e
+cat <<EOF
+This is Node.js ${NODE_VERSION} S2I builder image:
+To use it, install S2I CLI: https://github.com/openshift/source-to-image
+
+Example invocation:
+s2i build (<source url> | <working dir>) <builder image> <application image>
+
+You can then run the resulting image via:
+docker run <application image>
+EOF

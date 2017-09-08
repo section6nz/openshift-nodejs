@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: BuildConfig
+metadata:
+  name: haste-server-s2i
+  labels:
+    language: nodejs
+    nodejs: '7'
+    s2i: 'yes'
+spec:
+  triggers:
+    - type: ConfigChange
+  runPolicy: SerialLatestOnly
+  source:
+    type: Git
+    git:
+      uri: 'git@github.com:seejohnrun/haste-server.git'
+    dockerfile: |
+      FROM openshift/nodejs-7-s2i:latest
+      COPY package.json /tmp/package.json
+      RUN pushd ${OPENSHIFT_SOURCE_DIR} \
+        && cp /tmp/package.json . \
+        && npm install \
+        && rm -rf package.json \
+        && popd
+  strategy:
+    type: Docker
+    dockerStrategy:
+      from:
+        kind: ImageStreamTag
+        name: nodejs-7-s2i:latest
+        namespace: openshift
+      noCache: true
+      env:
+        - name: NPM_CONFIG_LOGLEVEL
+          value: info
+  output:
+    to:
+      kind: ImageStreamTag
+      name: 'haste-server-s2i:latest'

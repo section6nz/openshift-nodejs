@@ -1,0 +1,151 @@
+#!/bin/bash -e
+#
+# S2I assemble script for the node builder image.
+# The assemble script builds your application source ready to run.
+#
+# For more information refer to the documentation:
+# https://github.com/openshift/source-to-image/blob/master/docs/builder_image.md
+#
+
+################################################################################
+# Global Configuration
+################################################################################
+if [ -v DEBUG ]; then
+  set -x
+  MV_OPTS="-v"
+  CP_OPTS="-v"
+fi
+
+# set log levels
+export NPM_CONFIG_LOGLEVEL=${NPM_CONFIG_LOGLEVEL:-info}
+
+# ensure * matches . prefixed files/directories
+shopt -s dotglob
+S2I_SOURCE=${S2I_DESTINATION}/src
+S2I_ARTIFACTS=${S2I_DESTINATION}/artifacts
+
+################################################################################
+# Logging Helper Functions
+################################################################################
+function debug() {
+  [[ -v DEBUG ]] && echo -e "[DEBUG] ${1}" >&1 || :
+}
+
+function info() {
+  echo -e "[INFO] ${1}" >&1
+}
+
+function warn() {
+  echo -e "[WARN] ${1}" >&2
+}
+
+function error() {
+  echo -e "[ERROR] ${1}" >&2
+}
+
+function critical() {
+  error ${1}
+  exit 1
+}
+
+################################################################################
+# Helper Functions
+################################################################################
+function env-info() {
+  info "Build environment information"
+  info "Node.js $(node --version)"
+  info "NPM $(npm --version)"
+}
+
+# restore any saved artifacts
+function restore-artifacts() {
+  [[ -d "${S2I_ARTIFACTS}" ]] && {
+    info "Restoring artifacts from previous build.";
+    mv ${S2I_ARTIFACTS}/* ${OPENSHIFT_SOURCE_DIR}/.;
+  } || debug "No artifact directory found. Skipping restore."
+}
+
+# prepare source and saved artifacts prior to build
+function prepare() {
+  restore-artifacts
+  info "Installing source from s2i destination (${S2I_SOURCE})."
+  cp -R ${CP_OPTS} ${S2I_SOURCE}/* ${OPENSHIFT_SOURCE_DIR}/.
+}
+
+# clean prepared artifacts and source
+function clean() {
+  if [ ! -v SKIP_CLEAN ]; then
+    info "Cleaning all artifacts at ${S2I_SOURCE} and ${OPENSHIFT_SOURCE_DIR}"
+    rm -rf ${S2I_SOURCE}
+    rm -rf ${OPENSHIFT_SOURCE_DIR}
+  fi
+}
+
+################################################################################
+# Core Functions
+################################################################################
+# deploy built artifacts
+function deploy() {
+  if [ -v WEBPACK_DEPLOY ]; then
+    # if this is a webpack deployment, deploy ony build artifacts
+    info "Webpack deploy enabled. Installing dist artifacts only."
+    mv ${MV_OPTS} ${OPENSHIFT_SOURCE_DIR}/dist/* ${OPENSHIFT_DEPLOYMENTS_DIR}/.
+  else
+    # deploy build artifacts
+    info "Installing built artifacts."
+    mv ${MV_OPTS} ${OPENSHIFT_SOURCE_DIR}/* ${OPENSHIFT_DEPLOYMENTS_DIR}/.
+  fi
+}
+
+# perform required build (install) steps
+function build() {
+  # switch to source directory so that logs etc. can be written to disk
+  pushd ${OPENSHIFT_SOURCE_DIR}
+
+  # install dependencies and run scripts
+  info "Install dependencies."
+  npm install ${NPM_INSTALL_ARGS}
+
+  [[ -v NPM_SCRIPT_POST_INSTALL ]] \
+    && {
+      # loop through post install scripts
+      for s in ${NPM_SCRIPT_POST_INSTALL}; do npm run ${s}; done
+    }
+
+  # run webpack script if specified
+  [[ -v NPM_SCRIPT_WEBPACK ]] \
+    && {
+    info "NPM webpack script specified as '${NPM_SCRIPT_WEBPACK}'";
+    npm run ${NPM_SCRIPT_WEBPACK};
+  } || debug "NPM_SCRIPT_WEBPACK not specified, skipping webpack phase."
+
+  # run test script if specified
+  [[ -v NPM_SCRIPT_TEST ]] \
+    && {
+    info "NPM test script specified as '${NPM_SCRIPT_TEST}'";
+    npm run ${NPM_SCRIPT_TEST};
+  } || debug "NPM_SCRIPT_TEST not specified, skipping test phase."
+
+  # prune unless NPM_SKIP_PRUNE is defined
+  [[ -v NPM_SKIP_PRUNE ]] \
+    && debug "NPM_SKIP_PRUNE defined. Skipping prune command." || {
+    info "Pruning development dependencies.";
+    npm prune --production;
+  }
+
+  info "Cleaning cache."
+  npm cache clean
+
+  popd
+}
+
+# entrypoint function
+function main() {
+  env-info
+  prepare
+  build
+  deploy
+  clean
+}
+
+main

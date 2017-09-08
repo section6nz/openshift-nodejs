@@ -1,0 +1,34 @@
+FROM openshift/nodejs-7:latest
+
+ENV DESCRIPTION="A Node.js (${NODE_VERSION}) S2I." \
+  PORTS=${PORTS:-8080} \
+  NPM_CONFIG_PREFIX="${OPENSHIFT_SOURCE_DIR}/.npm-global" \
+  NPM_CONFIG_CACHE="${OPENSHIFT_SOURCE_DIR}/.npm"
+
+ENV PATH="${OPENSHIFT_SOURCE_DIR}/node_modules/.bin/:${NPM_CONFIG_PREFIX}/bin/:${S2I_SCRIPTS_PATH}:${PATH}"
+
+LABEL summary="Node.js ${NODE_VERSION} S2I" \
+      description="${DESCRIPTION}" \
+      io.k8s.description="${DESCRIPTION}" \
+      io.k8s.display-name="Node.js $NODEJS_VERSION S2I" \
+      io.openshift.tags="s2i,nodejs,nodejs-${NODEJS_VERSION},rhel-atomic"
+
+# install any and all packages required for assembling and serving a nodejs
+# application
+RUN microdnf install \
+      --enablerepo=rhel-7-server-rpms \
+      --nodocs \
+      make autoconf git gcc-c++ bzip2 \
+    && microdnf clean all
+
+COPY .s2i/bin/ ${S2I_SCRIPTS_PATH}
+
+EXPOSE ${PORTS}
+
+# openshift s2i builds enforces numeric user declartion by default, we drop the
+# root user and ensure permissions on application root directory is universal
+# https://docs.openshift.com/container-platform/3.5/creating_images/guidelines.html#openshift-container-platform-specific-guidelines
+USER ${BUILD_USER_ID}
+
+# set default command to display usage
+CMD ${S2I_SCRIPTS_PATH}/usage
